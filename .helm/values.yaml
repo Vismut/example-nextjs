@@ -1,0 +1,40 @@
+app:
+  replicas:
+    _default: 1
+    production: 3
+  nodes:
+    _default: node
+  resources:
+    requests:
+      memory:
+        _default: "1Gi"
+      cpu:
+        _default: "1000m"
+    limits:
+      memory:
+        _default: "1500Mi"
+  env:
+    port:
+      _default: "3000"
+
+  main_domain:
+    _default: nextjs.test.com
+    production: nextjs.test.com
+    local: nextjs.test.loc
+  profiler_domain:
+    _default: false
+    local: nextjs-profiler.test.loc
+
+nginx:
+  resources:
+    requests:
+      memory:
+        _default: "256Mi"
+      cpu:
+        _default: "250m"
+    limits:
+      memory:
+        _default: "256Mi"
+
+
+  

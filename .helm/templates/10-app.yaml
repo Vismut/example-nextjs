@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  annotations:
+    "werf.io/set-replicas-only-on-creation": "true"
+spec:
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+  replicas: {{ pluck .Values.global.env .Values.app.replicas | first | default .Values.app.replicas._default }}
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}
+    spec:
+{{- if ne .Values.werf.env "local" }}
+{{- include "tolerations" . | indent 6 }}
+{{- end }}
+      imagePullSecrets:
+      - name: registrysecret
+      volumes:
+        - name: profiler-dir
+          emptyDir: {}
+        - name: nginx-confs
+          configMap:
+            name: "{{ .Chart.Name }}-nginx-confs"
+        - name: app-dir-local-machine
+          hostPath:
+            path: /shared_volume/nodejs14/project
+      containers:
+{{- if ne .Values.werf.env "local" }}
+      - name: nginx
+        image: {{ .Values.werf.image.frontend }}
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/usr/sbin/nginx","-s","quit"]
+        resources:
+          requests:
+            cpu: {{ pluck .Values.global.env .Values.nginx.resources.requests.cpu | first | default .Values.nginx.resources.requests.cpu._default }}
+            memory: {{ pluck .Values.global.env .Values.nginx.resources.requests.memory | first | default .Values.nginx.resources.requests.memory._default }}
+          limits:
+            memory: {{ pluck .Values.global.env .Values.nginx.resources.limits.memory | first | default .Values.nginx.resources.limits.memory._default }}
+        ports:
+        - containerPort: 80
+          name: http-nginx
+        volumeMounts:
+        - name: nginx-confs
+          mountPath: /etc/nginx/conf.d/frontend.conf
+          subPath: frontend.conf
+        - name: nginx-confs
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        - name: nginx-confs
+          mountPath: /etc/nginx/fastcgi_params
+          subPath: fastcgi_params
+        - name: profiler-dir
+          mountPath: /opt/project/.clinic-shared
+{{- end }}
+      - name: app
+        livenessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          exec:
+            command: ["true"]
+        readinessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          exec:
+            command: ["true"]
+        image: {{ .Values.werf.image.app }}
+        command: ["/bin/sh","-c"]
+        #args: [ "env PORT=3001 clinic flame --debug --open=false --no-insight --on-port='autocannon -c100 localhost:3001' -- node app.js; cp -r .clinic/* .clinic-shared; npm run test; env PORT=3000 npm start" ]
+        #args: [ "ls -al; sleep 5s; env PORT=3000 npm start" ]
+        args: [ "sleep 1500s" ]
+        workingDir: /opt/project
+        resources:
+          requests:
+            cpu: {{ pluck .Values.global.env .Values.app.resources.requests.cpu | first | default .Values.app.resources.requests.cpu._default }}
+            memory: {{ pluck .Values.global.env .Values.app.resources.requests.memory | first | default .Values.app.resources.requests.memory._default }}
+          limits:
+            memory: {{ pluck .Values.global.env .Values.app.resources.limits.memory | first | default .Values.app.resources.limits.memory._default }}
+        ports:
+        - containerPort: {{ pluck .Values.global.env .Values.app.env.port | first | default .Values.app.env.port._default}}
+          name: app
+          protocol: TCP
+        - containerPort: 3001
+          name: app-test
+          protocol: TCP
+        securityContext:
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+{{/*        volumeMounts:*/}}
+{{/*        - name: profiler-dir*/}}
+{{/*          mountPath: /opt/project/.clinic-shared*/}}
+{{/*        - name: app-dir-local-machine*/}}
+{{/*          mountPath: /opt/project*/}}
+        env:
+{{ include "app_envs" . | indent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Chart.Name }}
+spec:
+  selector:
+    app: {{ .Chart.Name }}
+  ports:
+  - name: http-nginx
+    port: 80
+  - name: http
+    port: 3000
+  - name: http-test
+    port: 3001

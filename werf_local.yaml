@@ -1,0 +1,37 @@
+project: nodejs14
+configVersion: 1
+deploy:
+ helmRelease: "[[ project ]]-[[ env ]]"
+ namespace: "[[ env ]]"
+
+---
+image: nextjs-build
+from: node:14-alpine
+git:
+- add: /project
+  to: /opt/project
+  stageDependencies:
+    install:
+    - project/package.json
+    setup:
+    - '**/*'
+  excludePaths:
+    - .clinic/*
+shell:
+  beforeInstall: |
+    mkdir -p /opt/project
+    apk add --no-cache git wrk nano htop curl
+  setup: |
+    cd /opt/project
+    npm cache clean --force
+    npm i --loglevel verbose --no-dev
+
+---
+image: app
+fromImage: nextjs-build
+fromCacheVersion: "1"
+shell:
+  setup: |
+    cd /opt/project
+
+

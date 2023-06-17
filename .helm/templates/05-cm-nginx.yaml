@@ -1,0 +1,127 @@
+{{- if ne .Values.werf.env "local" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-nginx-confs
+data:
+  nginx.conf: |
+    user  nginx;
+    worker_processes  1;
+
+    error_log stderr warn;
+    pid        /var/run/nginx.pid;
+
+    events {
+        worker_connections  4000;
+    }
+
+    http {
+      ssl_protocols TLSv1.2 TLSv1.3;
+
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+
+      ##
+      # Logging Settings
+      ##
+      map $http_x_forwarded_proto $thescheme {
+        default $scheme;
+        https https;
+        http http;
+      }
+      map $thescheme $phphttps {
+        https on;
+        http off;
+      }
+      map $http_x_request_id $best_request_id {
+        default $http_x_request_id;
+        "" $request_id;
+      }
+
+      log_format combined_plus  escape=json '{ "ip": "$remote_addr", "http_user": "$remote_user", '
+                                              ' "request_id": "$best_request_id", "time": "$time_local", '
+                                              ' "method": "$request_method", "uri": "$thescheme://$http_host$request_uri", '
+                                              ' "protocol": "$server_protocol", "status": "$status", "body_size": "$body_bytes_sent", '
+                                              ' "referrer": "$http_referer", '
+                                              ' "user_agent": "$http_user_agent", "request_time": "$request_time", '
+                                              ' "cache_status": "$upstream_cache_status", '
+                                              ' "upstream_response_time": "$upstream_response_time", "upstream_addr": "$upstream_addr", '
+                                              ' "upstream_status": "$upstream_status", "upstream_response_length": "$upstream_response_length", '
+                                              ' "rewrited": "$uri$is_args$args", "redirect": "$sent_http_location"} ';
+        access_log /dev/stdout combined_plus;
+
+        server_tokens off;
+        sendfile        on;
+        #tcp_nopush     on;
+
+        keepalive_timeout  65;
+
+        client_max_body_size 30M;
+
+        ##
+        # Gzip Settings
+        ##
+        gzip on;
+        gzip_proxied any;
+        gzip_types
+            text/plain
+            text/css
+            application/json
+            application/javascript
+            text/javascript
+            text/xml
+            application/xml
+            application/xml+rss
+            image/svg+xml;
+        gzip_vary on;
+        gzip_comp_level 9;
+        gzip_buffers 16 8k;
+        gzip_http_version 1.1;
+
+        set_real_ip_from                0.0.0.0/0;
+        real_ip_header                  X-Forwarded-For;
+        real_ip_recursive               on;
+        proxy_set_header                Host        $host;
+        proxy_set_header                X-Real-IP   $remote_addr;
+        proxy_set_header                X-Forwarded-For $proxy_add_x_forwarded_for;
+        include /etc/nginx/conf.d/*.conf;
+    }
+
+
+  frontend.conf: |
+    server {
+        listen  80;
+        server_name  nextjs-profiler.test.loc;
+        set $log_location "frontend";
+        root    /opt/project/.clinic-shared/;
+
+        location / {
+          root    /opt/project/.clinic-shared/;
+          index index.html;
+          autoindex on;
+        }
+    }
+
+  fastcgi_params: |
+    fastcgi_param  QUERY_STRING       $query_string;
+    fastcgi_param  REQUEST_METHOD     $request_method;
+    fastcgi_param  CONTENT_TYPE       $content_type;
+    fastcgi_param  CONTENT_LENGTH     $content_length;
+    fastcgi_param  SCRIPT_NAME        $fastcgi_script_name;
+    fastcgi_param  REQUEST_URI        $request_uri;
+    fastcgi_param  DOCUMENT_URI       $document_uri;
+    fastcgi_param  DOCUMENT_ROOT      $document_root;
+    fastcgi_param  SERVER_PROTOCOL    $server_protocol;
+    fastcgi_param  GATEWAY_INTERFACE  CGI/1.1;
+    fastcgi_param  SERVER_SOFTWARE    nginx/$nginx_version;
+    fastcgi_param  REMOTE_ADDR        $remote_addr;
+    fastcgi_param  REMOTE_PORT        $remote_port;
+    fastcgi_param  SERVER_ADDR        $server_addr;
+    fastcgi_param  SERVER_PORT        $server_port;
+    fastcgi_param  SERVER_NAME        $server_name;
+    fastcgi_param  REDIRECT_STATUS    200;
+    fastcgi_param  HTTPS              $phphttps;
+    fastcgi_param  REQUEST_SCHEME     $thescheme;
+    fastcgi_param  HTTP_X_FORWARDED_SCHEME https;
+{{- end }}
